@@ -4,6 +4,7 @@ import threading
 import time
 import requests
 from typing import List
+import json
 
 
 class RLBotTwitchScript(BaseScript):
@@ -21,26 +22,42 @@ class RLBotTwitchScript(BaseScript):
             "Client-ID": self.client_id,
             'Content-Type': 'application/json',
         }
-        data = {
-            "broadcaster_id": self.broadcaster_id,
-            "title": prediction_title,
-            "outcomes": prediction_outcomes,
-            "prediction_window": prediction_window
-        }
+        data = {"broadcaster_id": self.broadcaster_id,
+                "title": prediction_title,
+                "outcomes": prediction_outcomes,
+                "prediction_window": prediction_window
+                }
         response = requests.post(f"https://api.twitch.tv/{channel_name}/predictions", data=data, headers=headers)
         if response.status_code == 200:
             print("Created prediction successfully")
         else:
             print("Failed to start prediction!")
+        response_json = json.load(response.json())
+        prediction_id = response_json["data"]["id"]
+        blue_outcome_id, pink_outcome_id = [outcome["id"] for outcome in response_json["data"]["outcomes"]]
         # get starting scores
-        scores = self._get_scores()
+        starting_scores = self._get_scores()
+
         # wait until condition(Blue was first to score 5 goals) is met (rlbot)
 
         # end bet (twitch api)
+        headers = {
+            'Authorization': 'Bearer cfabdegwdoklmawdzdo98xt2fo512y',
+            'Client-Id': self.client_id,
+        }
 
-        # start bet
-        # if condition():
-        #   end bet
+        json_data = {
+            'broadcaster_id': '141981764',
+            'id': prediction_id,
+            'status': 'RESOLVED',
+            'winning_outcome_id': '73085848-a94d-4040-9d21-2cb7a89374b7',
+        }
+
+        response = requests.patch('https://api.twitch.tv/helix/predictions', headers=headers, json=json_data)
+        if response.status_code == 200:
+            print("Ended prediction successfully")
+        else:
+            print("Failed to end prediction!")
         pass
 
     def _get_scores(self):
