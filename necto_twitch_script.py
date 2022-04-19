@@ -5,17 +5,23 @@ import time
 import requests
 from typing import List
 import json
+import asyncio
 
 
 class RLBotTwitchScript(BaseScript):
     def __init__(self, broadcaster_id):
         super().__init__("RLBotTwitchScript")
         self.broadcaster_id = broadcaster_id
+        # keys and secrets and stuff
         with open("client_data.txt", "r") as f:
-            self.client_id, self.client_secret = [line.strip().split("=")[1] for line in f.readlines()]
+            self.client_id, self.client_secret, self.user, self.oauth = [line.strip().split("=")[1] for line in
+                                                                         f.readlines()]
+        # rlbot innit
+        self.packet = self.wait_game_tick_packet()
+        self.f_packet = self.get_field_info()
 
-    def betting(self, condition, channel_name: str, prediction_title: str, prediction_outcomes,
-                prediction_window: int = 120):
+    def _start_prediction(self, channel_name: str, prediction_title: str, prediction_outcomes,
+                          prediction_window: int):
         # create a bet (twitch api)
         headers = {
             "Authorization": " ",
@@ -35,11 +41,9 @@ class RLBotTwitchScript(BaseScript):
         response_json = json.load(response.json())
         prediction_id = response_json["data"]["id"]
         blue_outcome_id, pink_outcome_id = [outcome["id"] for outcome in response_json["data"]["outcomes"]]
-        # get starting scores
-        starting_scores = self._get_scores()
+        return prediction_id, blue_outcome_id, pink_outcome_id
 
-        # wait until condition(Blue was first to score 5 goals) is met (rlbot)
-
+    def _end_prediction(self, prediction_id, result_id):
         # end bet (twitch api)
         headers = {
             'Authorization': 'Bearer cfabdegwdoklmawdzdo98xt2fo512y',
@@ -47,10 +51,10 @@ class RLBotTwitchScript(BaseScript):
         }
 
         json_data = {
-            'broadcaster_id': '141981764',
+            'broadcaster_id': self.broadcaster_id,
             'id': prediction_id,
             'status': 'RESOLVED',
-            'winning_outcome_id': '73085848-a94d-4040-9d21-2cb7a89374b7',
+            'winning_outcome_id': result_id,
         }
 
         response = requests.patch('https://api.twitch.tv/helix/predictions', headers=headers, json=json_data)
@@ -58,52 +62,47 @@ class RLBotTwitchScript(BaseScript):
             print("Ended prediction successfully")
         else:
             print("Failed to end prediction!")
-        pass
+
+    async def goals_check_condition(self, starting_score):
+        # wait until condition(Blue was first to score 5 goals) is met (rlbot)
+        while True:
+            current_scores = self._get_scores()
+            if starting_score[0] + 5 <= current_scores[0]:  # might break cos pizza
+                # blue wins the prediction
+                return 0
+            elif starting_score[1] + 5 <= current_scores[1]:
+                # orange wins the prediction
+                return 1
+            else:
+                print("No-one won yet")
+            await asyncio.sleep(1)
+
+    def betting(self, channel_name, prediction_title, prediction_outcomes, prediction_window: int = 120):
+        starting_scores = self._get_scores()
+
+        t = self._start_prediction(channel_name, prediction_title, prediction_outcomes, prediction_window)
+        prediction_id, blue_outcome_id, pink_outcome_id = t
+        result = await self.goals_check_condition(starting_scores)
+
+        if result:
+            result_id = pink_outcome_id
+        else:
+            result_id = blue_outcome_id
+
+        self._end_prediction(prediction_id, result_id)
+        print("it worked?")
 
     def _get_scores(self):
-        scores = [team.score for team in self.game_tick_packet.teams]
+        scores = [team.score for team in self.packet.teams]
         return scores
 
     def run(self):
         while True:
             self.packet = self.wait_game_tick_packet()
-            self.ball_predictions = self.get_ball_prediction_struct()
             if not self.f_packet:
                 self.f_packet = self.get_field_info()
             if self.packet.game_info.is_match_ended:
-                print("Game is over, exiting caster script.")
-                self.gameWrapUp()
                 break
-
-            if self.firstIter:
-                if self.packet.num_cars >= 1:
-                    if self.joinTimer <= 0:
-                        self.joinTimer = time.time()
-                    # arbitrary timer to ensure all cars connected
-                    if time.time() - self.joinTimer >= 1:
-                        self.firstIter = False
-                        self.currentTime = float(self.packet.game_info.seconds_elapsed)
-                        self.gatherMatchData()
-                        self.zoneInfo = ZoneAnalyst(self.currentZone, self.currentTime)
-                        self.KOE = KickoffExaminer(self.currentTime)
-
-            self.timeCheck(float(self.packet.game_info.seconds_elapsed))
-            self.match_clock_handler()
-            if not self.firstIter:
-
-                self.updateGameBall()
-                self.updateTouches()
-                self.demo_check()
-                self.updateTeamsInfo()
-                self.handleShotDetection()
-                self.scoreCheck()
-                self.overtimeCheck()
-                self.kickOffAnalyzer()
-                self.mid_game_summary()
-                if self.packet.game_info.is_kickoff_pause:
-                    self.zoneInfo.zoneTimer = self.currentTime
-                if self.currentTime - self.lastCommentTime >= 8:
-                    self.randomComment()
 
 
 if __name__ == "__main__":
