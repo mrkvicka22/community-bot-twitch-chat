@@ -1,9 +1,5 @@
 from rlbot.agents.base_script import BaseScript
-from queue import Queue
-import threading
-import time
 import requests
-from typing import List
 import json
 import asyncio
 
