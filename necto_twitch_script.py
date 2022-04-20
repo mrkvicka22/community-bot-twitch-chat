@@ -20,7 +20,7 @@ class RLBotTwitchScript(BaseScript):
                           prediction_window: int):
         # create a bet (twitch api)
         headers = {
-            "Authorization": " ",
+            "Authorization": self.user + " " + self.oauth,
             "Client-ID": self.client_id,
             'Content-Type': 'application/json',
         }
