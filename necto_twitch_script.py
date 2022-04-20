@@ -73,7 +73,7 @@ class RLBotTwitchScript(BaseScript):
                 print("No-one won yet")
             await asyncio.sleep(1)
 
-    def betting(self, channel_name, prediction_title, prediction_outcomes, prediction_window: int = 120):
+    async def betting(self, channel_name, prediction_title, prediction_outcomes, prediction_window: int = 120):
         starting_scores = self._get_scores()
 
         t = self._start_prediction(channel_name, prediction_title, prediction_outcomes, prediction_window)
